@@ -223,14 +223,85 @@ function Process() {
   );
 }
 
+const PHONE_PATTERN = /^(\+254|0)(7|1)\d{8}$/;
+const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const NAME_PATTERN = /^[a-zA-ZÀ-ɏ][a-zA-ZÀ-ɏ'-]*(\s+[a-zA-ZÀ-ɏ][a-zA-ZÀ-ɏ'-]*)+$/;
+
+// True for junk like "2222222222", "aaaaaaaaaa", or "asdasdasdasd" — one
+// character (or a short repeating chunk) padded out to pass a length check.
+function isLowEffortText(value) {
+  const compact = value.replace(/\s+/g, '');
+  if (!compact) return true;
+  const uniqueRatio = new Set(compact.toLowerCase()).size / compact.length;
+  if (uniqueRatio < 0.25) return true;
+  if (/^(.{1,4})\1+$/.test(compact)) return true;
+  return false;
+}
+
+function validateContactForm(data) {
+  const errors = {};
+
+  const fullname = (data.fullname || '').trim();
+  if (!fullname) errors.fullname = 'Please enter your full name.';
+  else if (!NAME_PATTERN.test(fullname)) errors.fullname = 'Please enter your first and last name.';
+
+  const phone = (data.phone || '').trim().replace(/\s+/g, '');
+  if (!phone) errors.phone = 'Please enter your phone number.';
+  else if (!PHONE_PATTERN.test(phone)) {
+    errors.phone = 'Enter a valid Kenyan number, e.g. +254 700 000 000.';
+  }
+
+  const email = (data.email || '').trim();
+  if (email && !EMAIL_PATTERN.test(email)) errors.email = 'Enter a valid email address.';
+
+  const service = (data.service || '').trim();
+  if (!service) errors.service = 'Please select a service.';
+
+  const details = (data.details || '').trim();
+  const detailsWordCount = details.split(/\s+/).filter(Boolean).length;
+  if (!details) errors.details = 'Please share a few details about your project.';
+  else if (details.length > 2000) errors.details = 'Please keep this under 2000 characters.';
+  else if (detailsWordCount < 4 || !/[a-zA-Z]/.test(details) || isLowEffortText(details)) {
+    errors.details = 'Please describe your project in a few real words, not just characters.';
+  }
+
+  return errors;
+}
+
 function ContactForm() {
   const [status, setStatus] = useState('idle'); // idle | sending | sent | error
   const [firstName, setFirstName] = useState('');
+  const [errors, setErrors] = useState({});
+
+  function clearError(field) {
+    setErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }
 
   async function handleSubmit(e) {
     e.preventDefault();
     const form = e.currentTarget;
     const data = Object.fromEntries(new FormData(form).entries());
+
+    if (data.botcheck) {
+      // Honeypot tripped: pretend to succeed without sending anything.
+      setFirstName((data.fullname || '').trim().split(' ')[0] || 'there');
+      setStatus('sent');
+      form.reset();
+      return;
+    }
+
+    const validationErrors = validateContactForm(data);
+    if (Object.keys(validationErrors).length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+    setErrors({});
+
     const name = (data.fullname || '').trim().split(' ')[0] || 'there';
 
     if (!FORM_ENDPOINT) {
@@ -301,21 +372,73 @@ function ContactForm() {
         <div className="form__row">
           <div className="form__field">
             <label htmlFor="fullname">Full name *</label>
-            <input id="fullname" name="fullname" type="text" required autoComplete="name" placeholder="Your name" />
+            <input
+              id="fullname"
+              name="fullname"
+              type="text"
+              required
+              autoComplete="name"
+              placeholder="Your name"
+              aria-invalid={!!errors.fullname}
+              onChange={() => clearError('fullname')}
+            />
+            {errors.fullname && (
+              <p className="form__error form__error--field" role="alert">{errors.fullname}</p>
+            )}
           </div>
           <div className="form__field">
             <label htmlFor="phone">Phone *</label>
-            <input id="phone" name="phone" type="tel" required autoComplete="tel" placeholder="+254 700 000 000" />
+            <input
+              id="phone"
+              name="phone"
+              type="tel"
+              required
+              autoComplete="tel"
+              placeholder="+254 700 000 000"
+              inputMode="tel"
+              aria-invalid={!!errors.phone}
+              onChange={(e) => {
+                const cleaned = e.target.value.replace(/[^\d+\s]/g, '');
+                if (cleaned !== e.target.value) e.target.value = cleaned;
+                clearError('phone');
+              }}
+              onKeyDown={(e) => {
+                if (e.key.length === 1 && !/[\d+\s]/.test(e.key) && !e.ctrlKey && !e.metaKey) {
+                  e.preventDefault();
+                }
+              }}
+            />
+            {errors.phone && (
+              <p className="form__error form__error--field" role="alert">{errors.phone}</p>
+            )}
           </div>
         </div>
         <div className="form__field">
           <label htmlFor="email">Email</label>
-          <input id="email" name="email" type="email" autoComplete="email" placeholder="you@company.com" />
+          <input
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder="you@company.com"
+            aria-invalid={!!errors.email}
+            onChange={() => clearError('email')}
+          />
+          {errors.email && (
+            <p className="form__error form__error--field" role="alert">{errors.email}</p>
+          )}
         </div>
         <div className="form__field">
-          <label htmlFor="service">Service required</label>
+          <label htmlFor="service">Service required *</label>
           <div className="form__select">
-            <select id="service" name="service" defaultValue="">
+            <select
+              id="service"
+              name="service"
+              defaultValue=""
+              required
+              aria-invalid={!!errors.service}
+              onChange={() => clearError('service')}
+            >
               <option value="">— Select a service —</option>
               {areas.map((a) => (
                 <option key={a.name}>{a.name}</option>
@@ -324,16 +447,34 @@ function ContactForm() {
             </select>
             <Icon d="M6 9l6 6 6-6" size={18} strokeWidth={2} className="form__chevron" />
           </div>
+          {errors.service && (
+            <p className="form__error form__error--field" role="alert">{errors.service}</p>
+          )}
         </div>
         <div className="form__field">
-          <label htmlFor="details">Project details</label>
+          <label htmlFor="details">Project details *</label>
           <textarea
             id="details"
             name="details"
             rows={5}
+            required
+            maxLength={2000}
             placeholder="Tell us about your organisation, what you need and your timeline…"
+            aria-invalid={!!errors.details}
+            onChange={() => clearError('details')}
           />
+          {errors.details && (
+            <p className="form__error form__error--field" role="alert">{errors.details}</p>
+          )}
         </div>
+        <input
+          type="text"
+          name="botcheck"
+          className="form__honeypot"
+          tabIndex={-1}
+          autoComplete="off"
+          aria-hidden="true"
+        />
         {status === 'error' && (
           <p className="form__error" role="alert">
             Something went wrong. Please try again, or email us at {company.email}.

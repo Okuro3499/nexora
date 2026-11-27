@@ -892,6 +892,25 @@ h2 {
   font-weight: 600;
 }
 
+.form__error--field {
+  margin-top: -2px;
+  font-size: 13px;
+}
+
+.form input[aria-invalid="true"],
+.form select[aria-invalid="true"],
+.form textarea[aria-invalid="true"] {
+  border-color: #ffb4b4;
+}
+
+.form__honeypot {
+  position: absolute !important;
+  left: -9999px !important;
+  width: 1px !important;
+  height: 1px !important;
+  overflow: hidden !important;
+}
+
 .form-done {
   display: flex;
   flex-direction: column;
