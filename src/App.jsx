@@ -1,7 +1,10 @@
 import { useState } from 'react';
 import { company, navLinks, industries, areas, values, steps } from './content.js';
 
-const FORM_ENDPOINT = import.meta.env.VITE_FORM_ENDPOINT || '';
+const WEB3FORMS_KEY = import.meta.env.VITE_WEB3FORMS_KEY || '';
+const FORM_ENDPOINT = WEB3FORMS_KEY
+  ? 'https://api.web3forms.com/submit'
+  : import.meta.env.VITE_FORM_ENDPOINT || '';
 
 function Icon({ d, size = 24, strokeWidth = 1.8, className }) {
   return (
@@ -78,14 +81,14 @@ function Hero() {
         <div className="hero__copy">
           <span className="pill">
             <span className="dot" aria-hidden="true" />
-            Nexora Softworks LTD · Kenya
+            Nexora Softworks LTD
           </span>
           <h1>
-            Reliable software for the businesses that move <span className="accent">Kenya</span> forward.
+            Reliable software for the businesses that move the <span className="accent">World</span> forward.
           </h1>
           <p className="hero__lead">
             We design and build practical, mobile-first systems for schools, transport operators and retail
-            businesses — so you can run your operations with confidence.
+            businesses, so you can run your operations with confidence.
           </p>
           <div className="hero__buttons">
             <a className="btn btn--primary btn--lg" href="#contact">
@@ -251,10 +254,18 @@ function ContactForm() {
 
     setStatus('sending');
     try {
+      const payload = WEB3FORMS_KEY
+        ? {
+            access_key: WEB3FORMS_KEY,
+            subject: `Project brief from ${data.fullname}`,
+            from_name: data.fullname,
+            ...data,
+          }
+        : data;
       const res = await fetch(FORM_ENDPOINT, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-        body: JSON.stringify(data),
+        body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error('Request failed');
       setFirstName(name);
